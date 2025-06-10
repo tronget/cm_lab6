@@ -19,7 +19,7 @@ from matplotlib.figure import Figure
 
 from methods import *
 from ode import ODE_PROBLEMS
-from utils import runge_error
+from utils import solve
 
 
 class PlotCanvas(FigureCanvas):
@@ -72,18 +72,17 @@ class MainWindow(QMainWindow):
         self.compute_btn.clicked.connect(self.on_compute)
 
         # Table to display values
-        self.table = QTableWidget(0, 8)
-        self.table.setHorizontalHeaderLabels([
-            "i",
-            "x",
-            "Euler y",
-            "Err Euler",
-            "Impr. Euler y",
-            "Err Impr.",
-            "Milne y",
-            "Err Milne",
-        ])
-        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table_euler = QTableWidget(0, 2)
+        self.table_euler.setHorizontalHeaderLabels(["x", "Euler y"])
+        self.table_ie = QTableWidget(0, 2)
+        self.table_ie.setHorizontalHeaderLabels(["x", "Impr. Euler y"])
+        self.table_milne = QTableWidget(0, 2)
+        self.table_milne.setHorizontalHeaderLabels(["x", "Milne y"])
+        self.table_euler.horizontalHeader().setStretchLastSection(True)
+        self.table_ie.horizontalHeader().setStretchLastSection(True)
+        self.table_milne.horizontalHeader().setStretchLastSection(True)
+
+        # self.table.horizontalHeader().setStretchLastSection(True)
 
         # Figure
         self.canvas = PlotCanvas()
@@ -95,7 +94,11 @@ class MainWindow(QMainWindow):
 
         right_layout = QVBoxLayout()
         right_layout.addWidget(self.canvas, stretch=3)
-        right_layout.addWidget(self.table, stretch=2)
+        tables_layout = QHBoxLayout()
+        tables_layout.addWidget(self.table_euler)
+        tables_layout.addWidget(self.table_ie)
+        tables_layout.addWidget(self.table_milne)
+        right_layout.addLayout(tables_layout, stretch=2)
 
         main_layout = QHBoxLayout()
         main_layout.addWidget(left_widget)
@@ -137,18 +140,16 @@ class MainWindow(QMainWindow):
             case 2:
                 c = (y0 + 0.5 * (math.sin(x0) + math.cos(x0))) / math.exp(x0)
 
-        # Numerical solutions at step h
-        xs_e, ys_e = euler_method(ode, x0, y0, xn, h)
-        xs_ie, ys_ie = improved_euler_method(ode, x0, y0, xn, h)
-        xs_m, ys_m = milne_method(ode, x0, y0, xn, h)
-
-        # Finer step for Runge error (h/2)
-        xs_e2, ys_e2 = euler_method(ode, x0, y0, xn, h / 2)
-        xs_ie2, ys_ie2 = improved_euler_method(ode, x0, y0, xn, h / 2)
-
-        err_e = runge_error(ys_e, ys_e2, p=1)
-        err_ie = runge_error(ys_ie, ys_ie2, p=2)
-        err_milne = [abs(ode.exact(x, c) - y) for x, y in zip(xs_m, ys_m)]
+        try:
+            xs_e, ys_e, err_e, h_e = solve(euler_method, ode, x0, y0, xn, h, epsilon, 1, self)
+            xs_ie, ys_ie, err_ie, h_ie = solve(improved_euler_method, ode, x0, y0, xn, h, epsilon, 2, self)
+            xs_m, ys_m, err_m, h_m = solve(milne_method, ode, x0, y0, xn, h, epsilon, 4, self)
+        except OverflowError:
+            QMessageBox.critical(self, "Computation failed", "Кол-во точек для вычислений больше 150000!")
+            return
+        except ValueError:
+            QMessageBox.critical(self, "Computation failed", "Для метода Милна необходимо 4 точки!")
+            return
 
         xs_exact = [x0 + i * h / 10 for i in range(int((xn - x0) / (h / 10)) + 1)]
         ys_exact = [ode.exact(x, c) for x in xs_exact]
@@ -159,32 +160,30 @@ class MainWindow(QMainWindow):
             "Milne": (xs_m, ys_m),
         })
 
-        nrows = min(len(xs_e), len(xs_ie), len(xs_m))
-        self.table.setRowCount(nrows)
-        for i in range(nrows):
-            row_items = [
-                str(i),
-                f"{xs_e[i]:.5g}",
-                f"{ys_e[i]:.5g}",
-                f"{err_e[i]:.2e}",
-                f"{ys_ie[i]:.5g}",
-                f"{err_ie[i]:.2e}",
-                f"{ys_m[i]:.5g}",
-                f"{err_milne[i]:.2e}",
-            ]
-            for j, text in enumerate(row_items):
-                self.table.setItem(i, j, QTableWidgetItem(text))
-        self.table.resizeColumnsToContents()
+        self.table_euler.setRowCount(len(xs_e))
+        for i in range(len(xs_e)):
+            self.table_euler.setItem(i, 0, QTableWidgetItem(f"{xs_e[i]:.5g}"))
+            self.table_euler.setItem(i, 1, QTableWidgetItem(f"{ys_e[i]:.5g}"))
 
-        # Optionally show max error dialog
-        max_e_err = max(err_e)
-        max_ie_err = max(err_ie)
-        max_m_err = max(err_milne)
+        self.table_ie.setRowCount(len(xs_ie))
+        for i in range(len(xs_ie)):
+            self.table_ie.setItem(i, 0, QTableWidgetItem(f"{xs_ie[i]:.5g}"))
+            self.table_ie.setItem(i, 1, QTableWidgetItem(f"{ys_ie[i]:.5g}"))
+
+        self.table_milne.setRowCount(len(xs_m))
+        for i in range(len(xs_m)):
+            self.table_milne.setItem(i, 0, QTableWidgetItem(f"{xs_m[i]:.5g}"))
+            self.table_milne.setItem(i, 1, QTableWidgetItem(f"{ys_m[i]:.5g}"))
+
+        self.table_euler.resizeColumnsToContents()
+        self.table_ie.resizeColumnsToContents()
+        self.table_milne.resizeColumnsToContents()
+
         QMessageBox.information(
             self,
             "Computation finished",
             (
                 f"Max errors:\n"
-                f"  Euler: {max_e_err:.2e}\n  Improved Euler: {max_ie_err:.2e}\n  Milne: {max_m_err:.2e}"
+                f"  Euler: {err_e:.2e}\n  Improved Euler: {err_ie:.2e}\n  Milne: {err_m:.2e}"
             ),
         )

@@ -1,29 +1,32 @@
 def euler_method(ode, x0, y0, xn, h):
-    xs, ys = [x0], [y0]
+    xs, ys = [], []
     x, y = x0, y0
-    while x < xn:
-        y = y + h * ode.f(x, y)
-        x = x + h
+    while x <= xn:
         xs.append(x)
         ys.append(y)
+        y = y + h * ode.f(x, y)
+        x = x + h
     return xs, ys
 
 
 def improved_euler_method(ode, x0, y0, xn, h):
-    xs, ys = [x0], [y0]
+    xs, ys = [], []
     x, y = x0, y0
-    while x < xn:
+    while x <= xn:
+        xs.append(x)
+        ys.append(y)
         k1 = ode.f(x, y)
         y_pred = y + h * k1
         k2 = ode.f(x + h, y_pred)
         y = y + (h / 2) * (k1 + k2)
         x = x + h
-        xs.append(x)
-        ys.append(y)
+
     return xs, ys
 
 
 def milne_method(ode, x0, y0, xn, h):
+    if (xn - x0) / h < 3:
+        raise ValueError
     xs, ys = [x0], [y0]
     x, y = x0, y0
     for _ in range(3):
@@ -38,7 +41,7 @@ def milne_method(ode, x0, y0, xn, h):
     f_vals = [ode.f(xx, yy) for xx, yy in zip(xs, ys)]
 
     i = 3
-    while xs[-1] + 1e-14 < xn:
+    while xs[-1] < xn:
         x_next = xs[-1] + h
         y_pred = ys[i - 3] + (4 * h / 3) * (2 * f_vals[i] - f_vals[i - 1] + 2 * f_vals[i - 2])
         f_pred = ode.f(x_next, y_pred)
